@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+
+# User-specific tasks — private, never committed
+custom_tasks/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
