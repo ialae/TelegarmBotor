@@ -147,19 +147,49 @@ copilot --agent <agent-name> \
 
 ---
 
-## 8. Quick Reference
+## 8. Model Selection
+
+Use `--model` to specify which AI model the agent should use:
+
+```bash
+copilot --agent my-agent --prompt "Your task" --model claude-sonnet-4-5
+```
+
+### Available Models
+
+| Model ID | Name | Tier |
+|---|---|---|
+| `claude-sonnet-4.6` | Claude Sonnet 4.6 | Standard |
+| `claude-haiku-4.5` | Claude Haiku 4.5 | Fast/cheap |
+| `claude-opus-4.6` | Claude Opus 4.6 | Premium |
+| `gpt-5.4` | GPT-5.4 | Standard |
+| `gpt-5.2` | GPT-5.2 | Standard |
+| `gpt-5.4-mini` | GPT-5.4 mini | Fast/cheap |
+| `gpt-4.1` | GPT-4.1 | Fast/cheap |
+
+**Rule:** When no `--model` flag is provided, Copilot uses its default model. Always specify `--model` explicitly in automation scripts for reproducible behavior.
+
+**Rule:** Choose the model tier based on the task complexity:
+- **Fast/cheap** (`claude-haiku-4.5`, `gpt-5.4-mini`, `gpt-4.1`) — simple, well-defined tasks (linting, formatting, boilerplate generation).
+- **Standard** (`claude-sonnet-4.6`, `gpt-5.4`, `gpt-5.2`) — general-purpose coding tasks.
+- **Premium** (`claude-opus-4.6`) — complex architectural decisions, multi-file refactors, nuanced reasoning.
+
+---
+
+## 9. Quick Reference
 
 | Goal | Command |
 |---|---|
 | Run agent non-interactively | `copilot --agent my-agent --prompt "..."` |
 | Pick agent in interactive mode | `copilot` → `/agent` |
 | Delegate to background async agent | `copilot` → `/delegate "..."` |
+| Choose a specific model | Add `--model claude-sonnet-4.6` |
 | Skip all permission prompts | Add `--yolo` |
 | Full autopilot with safety cap | `--autopilot --yolo --max-autopilot-continues 20` |
 
 ---
 
-## 9. Security Rules
+## 10. Security Rules
 
 `--yolo` / `--allow-all` grants Copilot permission to execute commands and edit files **without any review**. This carries real risk of unintended actions, data loss, or corruption.
 

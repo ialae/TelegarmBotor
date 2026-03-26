@@ -1,5 +1,5 @@
 ---
-name: telegramtaskor
+name: bottaskor
 description: Creates, fixes, or improves Telegram bot tasks — Python classes inheriting from BaseTask — in a specific bot's custom_tasks/ directory. Discovers existing bots automatically and asks which bot to target before writing any code.
 argument-hint: Create a task that checks website uptime or Fix the weather task — it crashes on unknown cities or Improve the reminder task with recurring reminders.
 tools: ['vscode', 'execute', 'read', 'agent', 'edit', 'search', 'web', 'todo']
