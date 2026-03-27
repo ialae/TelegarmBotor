@@ -28,6 +28,7 @@ from task_manager import TaskManager
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 BOTS_DIR = Path(__file__).parent / "bots"
