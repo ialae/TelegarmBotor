@@ -24,6 +24,7 @@ from telegram.ext import (
     filters,
 )
 
+from shared.store import SharedStore
 from task_manager import TaskManager
 
 load_dotenv()
@@ -91,31 +92,33 @@ def _build_bot_app(bot_config: dict):
     """
     bot_name: str = bot_config["name"]
 
-    def _build_welcome_text(tm: TaskManager, name: str) -> str:
-        lines = [
-            f"🤖 *{name.capitalize()} Bot Ready!*\n",
-            "Here's what I can do for you:\n",
-        ]
-        for task_class in tm.registered_task_classes():
-            lines.append(
-                f"{task_class.icon} *{task_class.name.capitalize()}*\n"
-                f"   {task_class.description}\n"
-                f"   Example: {task_class.usage}"
-            )
-        lines.append("\n━━━━━━━━━━━━━━━━━━━━━")
-        lines.append(
-            "💡 *Tip:* Messages matching a known task trigger that task; "
-            "everything else runs as a shell command."
-        )
-        return "\n\n".join(lines)
+    def _build_help_text(tm: TaskManager, name: str) -> str:
+        header = f"📖  *{name.capitalize()} Bot — Help*"
+        separator = "━━━━━━━━━━━━━━━━━━━━━"
 
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        sections: list[str] = []
+        for task_class in tm.registered_task_classes():
+            usage_lines = task_class.usage.strip().splitlines()
+            formatted_usage = "\n".join(
+                f"    {line.strip()}" for line in usage_lines
+            )
+            sections.append(
+                f"{task_class.icon}  *{task_class.name.capitalize()}*\n"
+                f"_{task_class.description}_\n\n"
+                f"{formatted_usage}"
+            )
+
+        body = f"\n\n{separator}\n\n".join(sections)
+        footer = "🔹  /help — Show this overview"
+        return f"{header}\n{separator}\n\n{body}\n\n{separator}\n{footer}"
+
+    async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not _is_authorized(update):
             return
         tm: TaskManager = context.application.bot_data[_TASK_MANAGER_KEY]
         name: str = context.application.bot_data[_BOT_NAME_KEY]
         await update.message.reply_text(
-            _build_welcome_text(tm, name), parse_mode="Markdown"
+            _build_help_text(tm, name), parse_mode="Markdown"
         )
 
     async def handle_message(
@@ -135,7 +138,7 @@ def _build_bot_app(bot_config: dict):
 
     app = ApplicationBuilder().token(bot_config["token"]).build()
     app.bot_data[_BOT_NAME_KEY] = bot_name
-    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
@@ -149,6 +152,7 @@ def _build_bot_app(bot_config: dict):
 
 async def _run_all_bots() -> None:
     """Discover all bots and run them concurrently until interrupted."""
+    shared = SharedStore()
     bot_configs = _discover_bots()
     if not bot_configs:
         log.error(
@@ -170,6 +174,7 @@ async def _run_all_bots() -> None:
             bot=app.bot,
             custom_tasks_dir=config["custom_tasks_dir"],
             data_dir=config["data_dir"],
+            shared=shared,
         )
         tm.auto_discover_tasks()
         await tm.start_scheduler()

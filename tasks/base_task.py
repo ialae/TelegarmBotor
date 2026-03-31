@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from telegram import Bot
 
 if TYPE_CHECKING:
+    from shared.store import SharedStore
     from .scheduler import Scheduler
 
 
@@ -34,7 +35,6 @@ class BaseTask(ABC):
     # Emoji icon for the /start menu
     icon: str = "🔧"
     # Prefix that triggers this task (used by auto-discovery).
-    # Set to "" for the fallback task (ShellCommandTask).
     trigger: str = ""
 
     def __init__(
@@ -42,10 +42,12 @@ class BaseTask(ABC):
         chat_id: int,
         bot: Bot,
         scheduler: Scheduler | None = None,
+        shared: SharedStore | None = None,
     ) -> None:
         self.chat_id = chat_id
         self.bot = bot
         self.scheduler = scheduler
+        self.shared = shared
         self._input_queue: asyncio.Queue[str] = asyncio.Queue()
         self._waiting_for_input: bool = False
 

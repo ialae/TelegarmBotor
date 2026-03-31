@@ -1,0 +1,24 @@
+[
+  {
+    "job_id": "d4787d3c",
+    "chat_id": 6736513319,
+    "label": "Hourly positive affirmations",
+    "schedule": "0 7-22 * * *",
+    "is_recurring": true,
+    "action_type": "trigger",
+    "action_payload": "affirmations deliver",
+    "created_at": "2026-03-30T15:21:58.749818",
+    "last_fired_at": "2026-03-31T17:00:29.021514"
+  },
+  {
+    "job_id": "8b965a86",
+    "chat_id": 6736513319,
+    "label": "Reminder: Say I'm a reputable manager at OCP",
+    "schedule": "30 13 * * *",
+    "is_recurring": true,
+    "action_type": "notify",
+    "action_payload": "Say I'm a reputable manager at OCP",
+    "created_at": "2026-03-31T12:16:10.584039",
+    "last_fired_at": null
+  }
+]

@@ -44,12 +44,14 @@ Before doing anything else — before asking questions, before writing a single 
 
 Read these files to fully understand the existing task system:
 
-1. `tasks/base_task.py` — the abstract base class, its lifecycle, and the `reply()` / `ask()` helpers. Note that every task receives `self.scheduler` (a `Scheduler` instance) automatically.
+1. `tasks/base_task.py` — the abstract base class, its lifecycle, and the `reply()` / `ask()` helpers. Note that every task receives `self.scheduler` (a `Scheduler` instance) and `self.shared` (a `SharedStore` instance) automatically.
 2. `tasks/scheduler.py` — the reusable `Scheduler` class. Understand the two job types (one-shot, recurring/cron), the two action types (`notify`, `trigger`), and the public API: `add_job()`, `remove_job()`, `list_jobs()`. Any task that needs scheduling must use this — never reimplement scheduling from scratch.
-3. `tasks/shell_task.py` — a concrete example showing how to implement `run()`, use `ask()` for confirmation, and set class metadata (`name`, `description`, `usage`, `icon`, `trigger`).
-4. **Discover existing bots** — list the `bots/` directory to find all bot directories. Each bot has its own `custom_tasks/` folder containing task files.
-5. `task_manager.py` — the routing/registry system (`register()`, `_resolve()`, `auto_discover_tasks()`) and scheduler lifecycle (`start_scheduler()`, `stop_scheduler()`).
-6. `bot.py` — the multi-bot runner that discovers bots, creates per-bot `TaskManager` instances, and runs them concurrently.
+3. `shared/store.py` — the `SharedStore` class. Provides typed, async-safe, cross-bot shared data collections backed by JSON files and Pydantic models. Understand the public API: `load()`, `save()`, `append()`, `remove()`, `update()`, `clear()`. Any task that needs to share data with tasks in other bots must use this via `self.shared`.
+4. `shared/models/` — Pydantic models for shared collections. Each collection's item schema is defined here so all bots import from the same source of truth.
+5. `tasks/shell_task.py` — a concrete example showing how to implement `run()`, use `ask()` for confirmation, and set class metadata (`name`, `description`, `usage`, `icon`, `trigger`).
+6. **Discover existing bots** — list the `bots/` directory to find all bot directories. Each bot has its own `custom_tasks/` folder containing task files.
+7. `task_manager.py` — the routing/registry system (`register()`, `_resolve()`, `auto_discover_tasks()`) and scheduler lifecycle (`start_scheduler()`, `stop_scheduler()`).
+8. `bot.py` — the multi-bot runner that discovers bots, creates per-bot `TaskManager` instances, and runs them concurrently. Creates a single `SharedStore` instance shared across all bots.
 
 **For FIX and IMPROVE modes:** also read the specific task file(s) the user is referring to, in full. Understand every line before changing anything.
 
@@ -72,6 +74,7 @@ Present all relevant questions at once and wait for answers before continuing.
 3. **Interaction Flow** — Does this task need to ask the user follow-up questions during execution? If yes, describe each question and when it should be asked.
 4. **Scheduling** — Does this task need to schedule recurring or one-time jobs? If yes, describe the schedule (e.g., "every day at 8am", "every Monday at 9am", "once at a specific time"). The built-in `Scheduler` (accessible via `self.scheduler`) supports cron expressions and one-shot datetimes — use it instead of `asyncio.sleep()` loops or custom timers.
 5. **External Dependencies** — Does this task need any external APIs or Python libraries beyond the standard library?
+6. **Shared Data** — Does this task need to read or write data that other bots' tasks also access? If yes, describe the shared collection name and the data shape. Shared data is stored via `self.shared` (`SharedStore`) and each collection uses a Pydantic model defined in `shared/models/`.
 
 ### FIX mode — ask all three (in addition to Target Bot):
 
@@ -99,7 +102,8 @@ After receiving all answers, do not ask further questions. Proceed to Phase 4.
 4. **Class metadata** — `name`, `description`, `usage`, `icon`, `trigger`.
 5. **`run()` method outline** — step-by-step logic including each `ask()` and `reply()` call.
 6. **Scheduler usage** — if the task needs scheduling, describe which `self.scheduler` calls will be made (`add_job`, `remove_job`, `list_jobs`), what schedule format will be used (cron expression or ISO datetime), and what action type (`notify` or `trigger`).
-7. **External dependencies** — any new packages needed.
+7. **Shared data usage** — if the task needs cross-bot shared data, describe which `self.shared` calls will be made (`load`, `save`, `append`, `remove`, `update`, `clear`), the collection name, and the Pydantic model.
+8. **External dependencies** — any new packages needed.
 
 ### FIX mode
 
@@ -136,6 +140,32 @@ Create `bots/<bot_name>/custom_tasks/<task_name>_task.py` with:
   - `icon` — a single relevant emoji.
   - `trigger` — the prefix string that routes messages to this task (e.g. `"weather"`, `"remind"`). TaskManager auto-builds a matcher from this.
   - `async def run(self, user_input: str) -> None` — the full implementation.
+
+**If the task uses shared data**, use `self.shared` (the `SharedStore` instance). Key patterns:
+
+```python
+from shared.models.todo import TodoItem  # Pydantic model from shared/models/
+
+# Load all items (returns list[TodoItem])
+items = await self.shared.load("todos", TodoItem)
+
+# Append one item
+items = await self.shared.append("todos", TodoItem(title="Buy milk"), TodoItem)
+
+# Update an item by index
+items = await self.shared.update("todos", 0, TodoItem(title="Buy oat milk"), TodoItem)
+
+# Remove an item by index
+removed = await self.shared.remove("todos", 2, TodoItem)
+
+# Overwrite the entire collection
+await self.shared.save("todos", items)
+
+# Clear all items
+await self.shared.clear("todos")
+```
+
+**Shared model files** live in `shared/models/`. If the task needs a new shared collection, create a Pydantic model file there (e.g., `shared/models/todo.py`). All bots' tasks import from the same model, ensuring schema consistency.
 
 **If the task uses scheduling**, use `self.scheduler` (never `asyncio.sleep` for deferred work). Key patterns:
 
@@ -195,9 +225,10 @@ Edit the existing task file. When adding new functionality:
 
 ### Important — Files you must NOT modify (all modes)
 
-- **`bot.py`** — multi-bot discovery and runner are handled here; no edits needed.
-- **`tasks/__init__.py`** — this exports only framework classes (`BaseTask`, `Scheduler`, `ShellCommandTask`); custom tasks live in `bots/<bot_name>/custom_tasks/`.
+- **`bot.py`** — multi-bot discovery and runner are handled here; no edits needed. It also provides a `/help` command handler automatically for every bot — `/help` shows a help overview listing all tasks with their usage. These are built from each task's `name`, `description`, `usage`, and `icon` metadata. No per-task changes are needed for this command to work.
+- **`tasks/__init__.py`** — this exports framework classes (`BaseTask`, `Scheduler`, `SharedStore`); custom tasks live in `bots/<bot_name>/custom_tasks/`.
 - **`tasks/scheduler.py`** — the scheduler framework is complete; tasks use it via `self.scheduler`, never modify the scheduler itself.
+- **`shared/store.py`** — the shared store framework is complete; tasks use it via `self.shared`, never modify the store itself.
 - **`task_manager.py`** — the auto-discovery and scheduler wiring are already in place.
 
 ---
@@ -211,15 +242,18 @@ Before declaring done, run through the checklist that matches the mode.
 - [ ] The task file exists in `bots/<bot_name>/custom_tasks/` and follows the naming convention `*_task.py`.
 - [ ] The class inherits from `BaseTask` and implements `run()`.
 - [ ] All five metadata attributes are set: `name`, `description`, `usage`, `icon`, `trigger`.
-- [ ] The `trigger` attribute is a non-empty string (empty trigger is reserved for the fallback ShellCommandTask).
+- [ ] The `trigger` attribute is a non-empty string (empty string means the task is never auto-matched).
 - [ ] Imports use `from tasks.base_task import BaseTask` (absolute, not relative).
 - [ ] If external dependencies are needed, `requirements.txt` is updated.
 - [ ] The code complies with `copilot-instructions.md` (no magic strings, no dead code, proper naming, functions under 40 lines, nesting under 3 levels, etc.).
 - [ ] All relevant skills from `.github/skills/` have been applied.
 - [ ] The `ask()` / `reply()` pattern is used correctly for any user interaction needed mid-task.
 - [ ] If the task uses scheduling, it accesses the scheduler via `self.scheduler` and does not reimplement timers or sleep loops.
+- [ ] If the task uses shared data, it accesses the store via `self.shared` and uses Pydantic models from `shared/models/`.
+- [ ] Shared data models are defined in `shared/models/`, not inside the task file.
 - [ ] Scheduled `trigger` jobs only target tasks that do not require interactive `ask()` input.
-- [ ] `bot.py`, `tasks/__init__.py`, `tasks/scheduler.py`, and `task_manager.py` were **not** modified.
+- [ ] `bot.py`, `tasks/__init__.py`, `tasks/scheduler.py`, `shared/store.py`, and `task_manager.py` were **not** modified.
+- [ ] Task metadata (`name`, `description`, `usage`, `icon`) is accurate — these are displayed by the `/help` command automatically.
 
 ### FIX mode — additional checks:
 
@@ -249,4 +283,6 @@ If any item fails, fix it before reporting completion.
 - **Never break existing behavior (IMPROVE mode).** Improvements must be additive unless the user explicitly asks to change existing behavior.
 - **Never modify framework files.** Custom tasks go in `bots/<bot_name>/custom_tasks/` only. The auto-discovery and scheduler handle registration and scheduling.
 - **Never reimplement scheduling.** Always use `self.scheduler` for timed/recurring work. Never use `asyncio.sleep()` for deferred jobs — the scheduler persists across restarts, `asyncio.sleep()` does not.
+- **Never reimplement shared data storage.** Always use `self.shared` for cross-bot data. Never create ad-hoc JSON files or global variables for data that multiple bots' tasks need to access.
+- **Always define shared models in `shared/models/`.** Never define Pydantic models for shared collections inside task files — they must be importable by all bots.
 - **Follow every rule from `copilot-instructions.md`.** No exceptions.

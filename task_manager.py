@@ -46,15 +46,31 @@ from typing import Callable, Type
 
 from telegram import Bot
 
+from shared.store import SharedStore
 from tasks.base_task import BaseTask
 from tasks.scheduler import Scheduler
-from tasks.shell_task import ShellCommandTask
 
 log = logging.getLogger(__name__)
 
 MatcherFn = Callable[[str], bool]
 
 SCHEDULED_JOBS_FILENAME = "scheduled_jobs.json"
+
+
+class _UnknownCommandTask(BaseTask):
+    """Fallback task that gracefully rejects unrecognised input."""
+
+    name = "unknown"
+    description = ""
+    usage = ""
+    icon = ""
+    trigger = ""
+
+    async def run(self, user_input: str) -> None:
+        await self.reply(
+            "❓ I don't know how to do that. "
+            "Send /help to see what I can do."
+        )
 
 
 class TaskManager:
@@ -75,10 +91,12 @@ class TaskManager:
         bot: Bot,
         custom_tasks_dir: Path,
         data_dir: Path,
+        shared: SharedStore | None = None,
     ) -> None:
         self.bot = bot
         self._custom_tasks_dir = custom_tasks_dir
         self._data_dir = data_dir
+        self._shared = shared
         self._running: dict[int, asyncio.Task] = {}
         self._tasks: dict[int, BaseTask] = {}
         self._registry: list[tuple[MatcherFn, Type[BaseTask]]] = []
@@ -96,8 +114,8 @@ class TaskManager:
         self._registry.append((matcher, task_class))
 
     def registered_task_classes(self) -> list[Type[BaseTask]]:
-        """Return all registered task classes plus the fallback, in order."""
-        return [cls for _, cls in self._registry] + [ShellCommandTask]
+        """Return all registered task classes, in order."""
+        return [cls for _, cls in self._registry]
 
     # ------------------------------------------------------------------
     # Scheduler lifecycle
@@ -181,9 +199,8 @@ class TaskManager:
         """Pick the right task class for this message."""
         for matcher, task_class in self._registry:
             if matcher(text):
-                return task_class(chat_id, self.bot, self.scheduler)
-        # Default fallback
-        return ShellCommandTask(chat_id, self.bot, self.scheduler)
+                return task_class(chat_id, self.bot, self.scheduler, self._shared)
+        return _UnknownCommandTask(chat_id, self.bot, self.scheduler, self._shared)
 
     async def _cancel(self, chat_id: int) -> None:
         """Cancel any currently running task for this chat."""

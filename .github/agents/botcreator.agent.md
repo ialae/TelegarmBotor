@@ -24,10 +24,11 @@ Before doing anything else:
 
 ## Phase 2 — Understand the Architecture (mandatory, never skip)
 
-1. Read `bot.py` — understand how bots are discovered under `bots/`, how tokens are resolved from `TELEGRAM_BOT_TOKEN_<NAME>`, and how all bots run concurrently.
-2. Read `task_manager.py` — understand how each bot gets its own `TaskManager` with parameterized `custom_tasks_dir` and `data_dir`.
-3. List `bots/` directory to see existing bots — avoid name collisions.
-4. Read `.env` to see the current token configuration pattern.
+1. Read `bot.py` — understand how bots are discovered under `bots/`, how tokens are resolved from `TELEGRAM_BOT_TOKEN_<NAME>`, and how all bots run concurrently. A single `SharedStore` instance is created and passed to all bots.
+2. Read `task_manager.py` — understand how each bot gets its own `TaskManager` with parameterized `custom_tasks_dir` and `data_dir`, plus a shared `SharedStore`.
+3. Read `shared/store.py` — understand the `SharedStore` class that provides typed, async-safe, cross-bot shared data collections. Tasks access it via `self.shared`.
+4. List `bots/` directory to see existing bots — avoid name collisions.
+5. Read `.env` to see the current token configuration pattern.
 
 ---
 
@@ -94,9 +95,10 @@ If the user requested initial tasks, create them following the same contract as 
 
 ### Important — Files you must NOT modify
 
-- **`bot.py`** — auto-discovers bots from `bots/`; no edits needed for new bots.
+- **`bot.py`** — auto-discovers bots from `bots/`; no edits needed for new bots. It also provides a `/help` command handler automatically for every bot — `/help` shows a help overview listing all tasks with their usage. These are built from each task's `name`, `description`, `usage`, and `icon` metadata.
 - **`task_manager.py`** — already parameterized; no edits needed.
 - **`tasks/__init__.py`**, **`tasks/scheduler.py`** — framework files, never touch.
+- **`shared/store.py`**, **`shared/__init__.py`** — shared store framework, never touch.
 - **Other bots' directories** — never modify another bot's files.
 
 ---
@@ -111,6 +113,7 @@ If the user requested initial tasks, create them following the same contract as 
 - [ ] If initial tasks were created, they follow the full `telegramtaskor` contract.
 - [ ] No framework files were modified.
 - [ ] The bot will be automatically discovered by `bot.py` on next startup.
+- [ ] The `/help` command will work out of the box (provided by the framework) once at least one task is registered.
 
 ---
 
